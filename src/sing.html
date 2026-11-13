@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Middle Chinese Song</title>
+<style>
+  :root { --fg: #222; --mute: #888; --bg: #fafaf8; --line: #ddd; --hi: #b33; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #ddd; --mute: #888; --bg: #161616; --line: #333; --hi: #e77; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 16px; font-weight: 600; margin: 0 0 16px; }
+  textarea { width: 100%; box-sizing: border-box; height: 110px; font: 17px/1.6 serif; background: transparent; color: inherit; border: 1px solid var(--line); padding: 8px; resize: vertical; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 10px 0; }
+  select, input, button { font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); padding: 3px 6px; }
+  input[type=number] { width: 58px; }
+  button { cursor: pointer; padding: 4px 12px; }
+  label { white-space: nowrap; }
+  audio { width: 100%; margin: 12px 0 4px; }
+  #lyric { font: 24px/1.6 serif; min-height: 40px; letter-spacing: 2px; }
+  #lyric b { color: var(--hi); font-weight: normal; }
+  #status { color: var(--mute); }
+  pre { font: 14px/1.35 Menlo, monospace; overflow-x: auto; border-top: 1px solid var(--line); padding-top: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Middle Chinese Song <span id="status"></span></h1>
+  <div class="row"><select id="poem"></select></div>
+  <textarea id="text"></textarea>
+  <div class="row">
+    <label>voice <select id="voice"><option>woman</option><option>man</option><option>elder</option><option>crone</option><option>child</option></select></label>
+    <label>mode <select id="mode"><option value="">auto</option><option>宮</option><option>商</option><option>角</option><option>徵</option><option>羽</option></select></label>
+    <label>tempo <input id="tempo" type="number" value="66" min="30" max="140"></label>
+    <label>seed <input id="seed" type="number" value="1"></label>
+    <button id="reseed" title="new seed">↻</button>
+  </div>
+  <div class="row">
+    <label><input type="checkbox" id="xiao" checked> 簫</label>
+    <label><input type="checkbox" id="pipa" checked> 琵琶</label>
+    <label><input type="checkbox" id="qin"> 琴</label>
+    <label><input type="checkbox" id="perc" checked> 拍板</label>
+    <label title="笙 笛 簫 琵琶 箏 阮 鼓 拍板 方響 (band.js)"><input type="checkbox" id="full"> full band</label>
+    <label title="sing these words to the previous tune"><input type="checkbox" id="keep"> keep tune</label>
+    <button id="go">compose &amp; sing</button>
+    <button id="dl" disabled>wav</button>
+  </div>
+  <audio id="au" controls></audio>
+  <div id="lyric"></div>
+  <pre id="score"></pre>
+</main>
+<script src="speech/mcsynth.js"></script>
+<script src="sing.js"></script>
+<script src="band.js"></script>
+<script>
+var $ = function (id) { return document.getElementById(id); }, dict = null, prev = null, wavURL = null, syls = [];
+SING.POEMS.forEach(function (p, i) { var o = document.createElement('option'); o.value = i; o.textContent = p.title; $('poem').appendChild(o); });
+$('poem').onchange = function () { $('text').value = SING.POEMS[this.value].text; };
+$('text').value = SING.POEMS[0].text;
+$('reseed').onclick = function () { $('seed').value = 1 + Math.floor(Math.random() * 999); go(); };
+$('go').onclick = go;
+fetch('speech/mc_dict.json').then(function (r) { return r.json(); }).then(function (d) { dict = d; })
+  .catch(function () { $('status').textContent = '— serve this folder over http (python3 -m http.server) so the dictionary can load'; });
+
+function go() {
+  if (!dict) return;
+  $('status').textContent = 'rendering…';
+  setTimeout(function () {
+    var band = ['xiao', 'pipa', 'qin', 'perc'].filter(function (k) { return $(k).checked; }).join(' ');
+    var song = SING.compose($('text').value, dict, { seed: +$('seed').value, mode: $('mode').value || undefined, tempo: +$('tempo').value,
+      template: $('keep').checked && prev ? prev : undefined });
+    var ro = { voice: $('voice').value, seed: +$('seed').value, band: band }, r = $('full').checked ? BAND.render(song, { voice: ro.voice, seed: ro.seed }) : SING.render(song, ro);
+    if (!$('keep').checked || !prev) prev = song;
+    $('score').textContent = SING.score(song) + (song.warn.length ? '\nnot in dictionary (skipped): ' + song.warn.join('') : '');
+    if (wavURL) URL.revokeObjectURL(wavURL);
+    wavURL = URL.createObjectURL(new Blob([SING.wav(r.L, r.R, r.sr)], { type: 'audio/wav' }));
+    $('au').src = wavURL; $('au').play(); $('dl').disabled = false;
+    syls = r.syls; $('status').textContent = '';
+  }, 30);
+}
+$('dl').onclick = function () { var a = document.createElement('a'); a.href = wavURL; a.download = ($('text').value.slice(0, 4) || 'song') + '.wav'; a.click(); };
+// karaoke: the current phrase, sung syllable highlighted
+(function tick() {
+  var t = $('au').currentTime, k = -1;
+  for (var i = 0; i < syls.length; i++) if (syls[i].t0 <= t) k = i;
+  var a = k, b = k;
+  if (k >= 0) {
+    while (a > 0 && syls[a - 1].off > syls[a].t0 - 0.35) a--;
+    while (b < syls.length - 1 && syls[b].off > syls[b + 1].t0 - 0.35) b++;
+    var h = ''; for (i = a; i <= b; i++) h += i === k && t < syls[k].off + 0.3 ? '<b>' + syls[i].ch + '</b>' : syls[i].ch;
+    if ($('lyric').innerHTML !== h) $('lyric').innerHTML = h;
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

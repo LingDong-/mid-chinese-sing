@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shawl Editor</title>
+<style>
+  :root { --fg: #ddd; --mute: #888; --bg: #141210; --panel: #1c1a17; --line: #34302b; --hi: #e9a15a; --bad: #ff5a4a; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 12px/1.45 -apple-system, system-ui, sans-serif; overflow: hidden; }
+  #c { position: fixed; left: 0; top: 0; width: calc(100vw - 290px); height: 100vh; display: block; }
+  #panel { position: fixed; right: 0; top: 0; bottom: 0; width: 290px; box-sizing: border-box; background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 6px 10px 30px; }
+  h2 { font-size: 11px; font-weight: 600; color: var(--mute); text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 0 4px; }
+  .row { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin: 3px 0; }
+  button, select, input { font: inherit; color: inherit; background: #26231f; border: 1px solid var(--line); padding: 2px 6px; border-radius: 2px; }
+  button { cursor: pointer; } button.on { border-color: var(--hi); color: var(--hi); } button:disabled, input:disabled, select:disabled { opacity: 0.4; }
+  input[type=number] { width: 58px; } input[type=range] { flex: 1; min-width: 0; }
+  label { color: var(--mute); } .v { color: var(--fg); }
+  .grid { display: grid; grid-template-columns: 52px 1fr 1fr 1fr; gap: 3px; align-items: center; margin: 3px 0; } .grid input { width: auto; min-width: 0; }
+  #issues { font: 11px/1.4 Menlo, monospace; color: #cbb; white-space: pre-wrap; } #issues b { color: var(--bad); font-weight: normal; }
+  #status { position: fixed; left: 10px; bottom: 8px; color: var(--mute); pointer-events: none; }
+  #help { position: fixed; left: 10px; top: 8px; color: var(--mute); pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="help">drag: orbit · right/⇧-drag: pan · wheel: zoom · click: select a point · drag the arrows (or the centre: screen plane) · Q world/local · F frame · Del delete · I insert · ⌘Z / ⇧⌘Z · space play</div>
+<div id="status"></div>
+<div id="panel">
+  <div class="row"><button id="vPath" class="on">path</button><button id="vSim">simulated</button><button id="undo">undo</button><button id="redo">redo</button><button id="exp">export</button><button id="imp">import</button></div>
+  <h2>view</h2>
+  <div class="row" id="shows"></div>
+  <div class="row"><label><input type="checkbox" id="xBody"> see-through body</label><label><input type="checkbox" id="xGarb"> see-through garments</label></div>
+  <h2>laying pose</h2>
+  <div class="row"><select id="pose"><option value="A">A-pose (bind)</option><option value="rest">rest pose</option></select><span style="color:var(--mute)">laid after the others settle in it</span></div>
+  <h2>path</h2>
+  <div class="row"><button id="addS">+ start</button><button id="ins">insert after</button><button id="addE">+ end</button><button id="del">delete</button><button id="space">world axes</button></div>
+  <div class="row"><label>length</label><span class="v" id="len"></span><label>ends above floor</label><span class="v" id="ends"></span></div>
+  <div id="pt"></div>
+  <h2>strip and fabric</h2>
+  <div class="grid"><label>width</label><input type="number" id="w" step="0.01"><label>spacing</label><input type="number" id="spacing" step="0.005"></div>
+  <div class="grid"><label>mass</label><input type="number" id="mass" step="0.01" title="kg/m²"><label>bend</label><input type="number" id="bend" step="5" title="bending compliance (higher = softer)"></div>
+  <div class="grid"><label>friction</label><input type="number" id="friction" step="0.05"></div>
+  <h2>run</h2>
+  <div class="row"><button id="settle">settle</button><button id="play">▶ play</button><select id="poem"></select></div>
+  <div class="row"><input type="range" id="time" min="0" max="60" step="0.05" value="0"><span class="v" id="tval">0.0 s</span></div>
+  <div id="issues"></div>
+  <input type="file" id="file" accept=".json,application/json" style="display:none">
+</div>
+<script>window.STAGE_EDITOR = true;</script>
+<script src="speech/mcsynth.js"></script>
+<script src="sing.js"></script>
+<script src="figure.js"></script>
+<script src="stage.js"></script>
+<script src="shawl.js"></script>
+</body>
+</html>

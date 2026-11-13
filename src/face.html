@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Face Makeup</title>
+<style>
+  :root { --fg: #ddd; --mute: #888; --bg: #141210; --panel: #1c1a17; --line: #34302b; --hi: #e9a15a; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 12px/1.45 -apple-system, system-ui, sans-serif; overflow: hidden; }
+  #c { position: fixed; left: 0; top: 0; width: calc(100vw - 300px); height: 100vh; display: block; cursor: none; }
+  #panel { position: fixed; right: 0; top: 0; bottom: 0; width: 300px; box-sizing: border-box; background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 8px 10px 40px; }
+  h2 { font-size: 11px; font-weight: 600; color: var(--mute); text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 0 5px; }
+  .row { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin: 3px 0; }
+  button, select, input { font: inherit; color: inherit; background: #26231f; border: 1px solid var(--line); padding: 2px 6px; border-radius: 2px; }
+  button { cursor: pointer; } button.on { border-color: var(--hi); color: var(--hi); }
+  input[type=range] { flex: 1; min-width: 60px; } input[type=color] { padding: 0; width: 34px; height: 22px; }
+  label { color: var(--mute); }
+  .layer { display: grid; grid-template-columns: 18px 1fr 22px 22px; gap: 2px 4px; align-items: center; padding: 3px 4px; border: 1px solid transparent; border-radius: 2px; cursor: pointer; }
+  .layer.act { border-color: var(--hi); background: #2a241d; }
+  .layer .opts { grid-column: 1 / 5; display: flex; gap: 4px; align-items: center; }
+  .layer .opts input[type=range] { min-width: 40px; }
+  #status { position: fixed; left: 10px; bottom: 8px; color: var(--mute); pointer-events: none; }
+  #help { position: fixed; left: 10px; top: 8px; color: var(--mute); pointer-events: none; }
+  .hdl { position: fixed; width: 10px; height: 10px; margin: -6px 0 0 -6px; border: 2px solid #e9a15a; border-radius: 50%; background: rgba(0,0,0,0.4); cursor: grab; z-index: 3; }
+  #brushRing { position: fixed; border: 1px solid rgba(255, 240, 220, 0.8); border-radius: 50%; pointer-events: none; display: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="help">left: paint · right/alt-drag: orbit · ⇧-drag or middle: pan · wheel: zoom · [ ]: brush size · X: eraser · B: brush · I: eyedropper · M: mirror · ⌘Z / ⇧⌘Z</div>
+<div id="status"></div><div id="brushRing"></div><div id="handles"></div>
+<div id="panel">
+  <div class="row"><select id="style" title="style: Tang (唐) or Song (宋) costume and makeup"><option value="tang">唐 Tang</option><option value="song">宋 Song</option></select><button id="load">load…</button><button id="save">save figure.json</button><button id="undo">undo</button><button id="redo">redo</button></div>
+  <h2>tool</h2>
+  <div class="row"><button id="tBrush" class="on">brush</button><button id="tErase">eraser</button><button id="tBlur">blur</button><button id="tPick">eyedropper</button><button id="tStamp">stamp</button></div>
+  <div class="row"><label>stamp</label><select id="stamp"></select></div>
+  <div class="row"><label>colour</label><input type="color" id="color" value="#c8323a"><label><input type="checkbox" id="mirror" checked> mirror L/R</label></div>
+  <div class="row"><label style="width:54px">size</label><input type="range" id="size" min="0.5" max="40" step="0.5" value="6"><span id="sizeV"></span></div>
+  <div class="row"><label style="width:54px">hardness</label><input type="range" id="hard" min="0" max="0.95" step="0.05" value="0.3"></div>
+  <div class="row"><label style="width:54px">flow</label><input type="range" id="flow" min="0.02" max="1" step="0.02" value="0.3"></div>
+  <h2>layers</h2>
+  <div id="layers"></div>
+  <div class="row"><button id="clear">clear layer</button><button id="convert" title="replace all layers with the figure's decals and built-in powder">reset from decals</button></div>
+  <h2>lashes</h2>
+  <div class="row"><label style="width:62px">length</label><input type="range" id="lLen" min="0.3" max="2" step="0.05"><label>colour</label><input type="color" id="lCol"></div>
+  <div class="row"><label style="width:62px">curl</label><input type="range" id="lCurl" min="0" max="2" step="0.05"></div>
+  <div class="row"><label style="width:62px">density</label><input type="range" id="lDen" min="0.3" max="2" step="0.05"></div>
+  <div class="row"><label style="width:62px">thickness</label><input type="range" id="lThk" min="0.3" max="3" step="0.05"></div>
+  <div class="row"><label style="width:62px">inner·mid·outer</label><input type="range" id="lP0" min="0.1" max="1.6" step="0.05" style="min-width:40px"><input type="range" id="lP1" min="0.1" max="1.6" step="0.05" style="min-width:40px"><input type="range" id="lP2" min="0.1" max="1.6" step="0.05" style="min-width:40px"></div>
+  <div class="row"><button id="lEdit" title="drag the three points on each lid to move / bend the lash line (mirrored)">edit lash line</button><button id="lReset">reset line</button></div>
+  <h2>view</h2>
+  <div class="row"><button id="vLight" class="on">stage light</button><button id="vFlat">flat</button><button id="vBefore">before / after</button></div>
+  <div class="row"><label><input type="checkbox" id="mouth"> mouth open</label><label><input type="checkbox" id="blink"> blink</label><label><input type="checkbox" id="hair" checked> hair</label></div>
+  <div class="row"><button id="cFront">front</button><button id="cL">¾ left</button><button id="cR">¾ right</button><button id="cSide">side</button></div>
+  <h2>skin (not painted)</h2>
+  <div class="row"><label style="width:84px">natural lip tone</label><input type="range" id="lipTone" min="0" max="1" step="0.05" value="0.25"></div>
+  <div class="row"><label style="width:84px">mouth interior</label><input type="range" id="cavity" min="0" max="1" step="0.02" value="0.94"></div>
+  <input type="file" id="file" accept=".json,application/json" style="display:none">
+</div>
+<script>window.STAGE_EDITOR = true;</script>
+<script src="speech/mcsynth.js"></script>
+<script src="sing.js"></script>
+<script src="figure.js"></script>
+<script src="stage.js"></script>
+<script src="face.js"></script>
+</body>
+</html>

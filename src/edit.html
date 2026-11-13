@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Figure Editor</title>
+<style>
+  :root { --fg: #ddd; --mute: #888; --bg: #141210; --panel: #1c1a17; --line: #34302b; --hi: #e9a15a; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 12px/1.45 -apple-system, system-ui, sans-serif; overflow: hidden; }
+  #c { position: fixed; left: 0; top: 0; right: 300px; bottom: 0; width: calc(100vw - 300px); height: 100vh; display: block; }
+  #panel { position: fixed; right: 0; top: 0; bottom: 0; width: 300px; box-sizing: border-box; background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 8px 10px 40px; }
+  h2 { font-size: 11px; font-weight: 600; color: var(--mute); text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 0 5px; }
+  .row { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin: 3px 0; }
+  button, select, input { font: inherit; color: inherit; background: #26231f; border: 1px solid var(--line); padding: 2px 6px; border-radius: 2px; }
+  button { cursor: pointer; } button.on { border-color: var(--hi); color: var(--hi); }
+  input[type=number] { width: 62px; } input[type=range] { flex: 1; }
+  label { color: var(--mute); }
+  #tree { max-height: 300px; overflow-y: auto; border: 1px solid var(--line); padding: 3px 0; font-size: 11px; }
+  #tree div { padding: 0 4px; white-space: nowrap; cursor: pointer; } #tree div:hover { background: #2a2622; } #tree .sel { background: #3a2f22; color: var(--hi); } #tree .grp { color: var(--mute); } #tree .grp.sel { color: var(--hi); } #tree .tw { display: inline-block; width: 12px; color: var(--mute); }
+  #marq { position: fixed; border: 1px dashed var(--hi); pointer-events: none; display: none; }
+  #fields .f { display: grid; grid-template-columns: 34px 1fr 1fr 1fr; gap: 3px; margin: 2px 0; align-items: center; }
+  #fields input[type=number] { width: auto; min-width: 0; }
+  #status { position: fixed; left: 10px; bottom: 8px; color: var(--mute); pointer-events: none; }
+  #report { white-space: pre-wrap; font: 11px/1.4 Menlo, monospace; color: #cbb; max-height: 160px; overflow-y: auto; }
+  #help { position: fixed; left: 10px; top: 8px; color: var(--mute); pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="help">drag: orbit · right/alt-drag: pan · wheel: zoom · click: select · ⇧/⌘-click: add/remove · ⇧/⌘-drag: box select · W/E/R: move/rotate/scale · Q: world/local axes · F: frame · Esc: clear · ⌘Z / ⇧⌘Z</div>
+<div id="status"></div><div id="marq"></div>
+<div id="panel">
+  <div class="row"><select id="style" title="style: Tang (唐) or Song (宋) costume and makeup"><option value="tang">唐 Tang</option><option value="song">宋 Song</option></select><button id="load">load…</button><button id="save">save figure.json</button><button id="undo">undo</button><button id="redo">redo</button></div>
+  <div class="row"><button id="mT" class="on">move</button><button id="mR">rotate</button><button id="mS">scale</button><button id="space" title="gizmo axes: world or the active item's own frame (Q)">world</button><label><input type="checkbox" id="mirror" checked> L/R mirror</label></div>
+  <h2>view</h2>
+  <div class="row"><label><input type="checkbox" id="showPrims" checked> primitives</label><label><input type="checkbox" id="showBones"> skeleton (joints editable)</label><label><input type="checkbox" id="showDecals" checked> decals</label></div>
+  <div class="row"><label><input type="checkbox" id="kids" checked> moving a joint moves its children</label></div>
+  <div class="row"><label>weights of</label><select id="heat"><option value="-1">—</option></select></div>
+  <div class="row"><label><input type="checkbox" id="hairPrev" checked> hair</label><select id="hairQ" title="hair preview: quick while editing, or as on the stage"><option value="edit">quick</option><option value="full">full</option></select><span style="opacity:0.6">masses in the “hair” group</span></div>
+  <div class="row"><label>quality</label><select id="res"><option value="0.008,0.004">preview</option><option value="0.005,0.0025">medium</option><option value="0.003,0.00125">full (slow)</option></select><button id="rebuild">rebuild</button></div>
+  <h2>pose</h2>
+  <div class="row"><select id="pose"><option value="bind">bind (edit here)</option></select></div>
+  <div class="row"><input type="range" id="tpose" min="0" max="50" step="0.05" value="0"><span id="tval"></span></div>
+  <h2>hierarchy</h2>
+  <div id="tree"></div>
+  <div class="row"><select id="newType"><option>ellipsoid</option><option>sphere</option><option>cone</option></select><button id="add">add</button><button id="dup">duplicate</button><button id="del">delete</button><button id="toEll" title="convert the selected spheres to ellipsoids (same shape) for per-axis scaling">→ ellipsoid</button></div>
+  <h2>selected</h2>
+  <div id="fields"><span style="color:var(--mute)">nothing selected</span></div>
+  <div id="ornPanel"></div>
+  <h2>check</h2>
+  <div class="row"><button id="check">run attachment check</button></div>
+  <div id="report"></div>
+  <h2>reference image</h2>
+  <div class="row"><button id="refLoad">image…</button><select id="refView"><option value="front">front</option><option value="side">side</option></select><input type="range" id="refOp" min="0" max="1" step="0.05" value="0.4"></div>
+  <div class="row"><label>height m</label><input type="number" id="refH" value="1.75" step="0.01"><label>y</label><input type="number" id="refY" value="0" step="0.01"></div>
+  <input type="file" id="file" accept=".json,application/json" style="display:none"><input type="file" id="refFile" accept="image/*" style="display:none">
+</div>
+<script>window.STAGE_EDITOR = true;</script>
+<script src="speech/mcsynth.js"></script>
+<script src="sing.js"></script>
+<script src="figure.js"></script>
+<script src="stage.js"></script>
+<script src="edit.js"></script>
+</body>
+</html>

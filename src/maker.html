@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video Maker</title>
+<style>
+  :root { --fg: #222; --mute: #888; --bg: #fafaf8; --line: #ddd; --hi: #b33; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #ddd; --mute: #888; --bg: #161616; --line: #333; --hi: #e77; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 16px; font-weight: 600; margin: 0 0 14px; }
+  textarea { width: 100%; box-sizing: border-box; height: 150px; font: 18px/1.6 HanaMinA, serif; background: transparent; color: inherit; border: 1px solid var(--line); padding: 8px; resize: vertical; }
+  .hint { color: var(--mute); font-size: 12px; margin: 4px 0 14px; }
+  #poem { border-top: 1px solid var(--line); padding: 12px 0; }
+  .st { margin-bottom: 18px; } .st + .st { border-top: 1px dashed var(--line); padding-top: 14px; }
+  .ln { display: flex; flex-wrap: wrap; gap: 6px 4px; margin-bottom: 8px; align-items: flex-start; }
+  .c { display: flex; flex-direction: column; align-items: center; min-width: 52px; }
+  .c b { font: 26px/1.3 HanaMinA, serif; font-weight: normal; }
+  .c i, .c select, .c input { font: 11px 'Source Code Pro', Menlo, monospace; font-style: normal; color: var(--mute); }
+  .c select, .c input { color: inherit; background: transparent; border: 1px solid var(--hi); max-width: 150px; }
+  .c.p b { color: var(--mute); }
+  .c.m b { color: var(--hi); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 10px 0; }
+  select, input, button { font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); padding: 3px 6px; }
+  input[type=number] { width: 64px; } #title { width: 180px; }
+  button { cursor: pointer; padding: 4px 12px; }
+  #jobs { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .job { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .job pre { font: 11px Menlo, monospace; color: var(--mute); white-space: pre-wrap; margin: 4px 0 0; max-height: 120px; overflow: auto; }
+  .ok { color: #3a7; } .bad { color: var(--hi); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Video Maker</h1>
+  <textarea id="text" placeholder="paste a poem…">寒雨連江夜入吳，平明送客楚山孤。
+洛陽親友如相問，一片冰心在玉壺。</textarea>
+  <div class="hint">，、 end a clause; 。？！ or a new line end a sentence. A blank line starts a new stanza (上下闋): the second stanza then reuses the first stanza's melody (aligned from the end, so a different 換頭 is fine). Characters with several readings are shown as menus; red characters are missing from the dictionary (type a Baxter reading, or they are skipped).</div>
+  <div id="poem"></div>
+  <div class="row">
+    <label>title <input id="title" placeholder="(first line)"></label>
+    <label title="盛唐: 濁上 stays 上, no 陰/陽 register split; 晚唐: 濁上變去, eight tones">pronunciation <select id="era"><option value="late">晚唐</option><option value="high">盛唐</option></select></label>
+    <label>style <select id="style"><option value="tang">唐</option><option value="song">宋</option></select></label>
+    <label>mode <select id="mode"><option value="">auto</option><option>宮</option><option>商</option><option>角</option><option>徵</option><option>羽</option></select></label>
+    <label>tempo <input id="tempo" type="number" min="40" max="120" placeholder="66"></label>
+    <label>seed <input id="seed" type="number" value="1"></label> <button id="dice" title="random seed">↻</button>
+  </div>
+  <div class="row">
+    <label>music <select id="band"><option value="full">full band</option><option value="sing">簫 琵琶 拍板</option></select></label>
+    <label>fps <select id="fps"><option>30</option><option>60</option></select></label>
+    <label>format <select id="aspect"><option value="landscape">16:9</option><option value="portrait">9:16 (portrait)</option></select></label>
+    <label>size <select id="res"><option value="720">720p</option><option value="1080">1080p</option></select></label>
+    <label title="the instrumental opening before she sings: full (~10 s), short (~3 s), none">prelude <select id="prelude"><option value="full">full</option><option value="short">short</option><option value="none">none</option></select></label>
+    <button id="go">render video</button> <span id="msg" class="hint"></span>
+  </div>
+  <div id="jobs"></div>
+</main>
+<script>
+var $ = function (id) { return document.getElementById(id); }, toks = [], timer = 0;
+function post(url, o) { return fetch(url, { method: 'POST', body: JSON.stringify(o) }).then(function (r) { return r.json(); }); }
+function esc(s) { return s.replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+
+function check() {
+  post('/api/readings', { text: $('text').value, era: $('era').value }).then(function (T) {
+    T.forEach(function (t, i) { var o = toks[i]; if (o && o.ch === t.ch && o.readings && t.readings) t.chosen = o.chosen; if (o && o.ch === t.ch && t.missing) t.sel = o.sel || t.sel; });
+    toks = T; draw();
+  });
+}
+function draw() {   // stanzas (blank lines) → lines → characters
+  var h = '<div class="st"><div class="ln">', nl = 0;
+  toks.forEach(function (t, i) {
+    if (t.ch === '\n') { nl++; return; }
+    if (nl) { h += '</div>' + (nl > 1 ? '</div><div class="st">' : '') + '<div class="ln">'; nl = 0; }
+    if (!t.readings && !t.missing) { if (/\S/.test(t.ch)) h += '<div class="c p"><b>' + esc(t.ch) + '</b></div>'; return; }
+    if (t.missing) { h += '<div class="c m"><b>' + esc(t.ch) + '</b><input data-i="' + i + '" value="' + esc(t.sel || '') + '" placeholder="baxter" size="7"></div>'; return; }
+    var R = t.readings[t.chosen];
+    if (t.readings.length === 1) { h += '<div class="c"><b>' + esc(t.ch) + '</b><i>' + R.bax + '</i><i>' + R.ipa + '</i></div>'; return; }
+    h += '<div class="c"><b>' + esc(t.ch) + '</b><select data-i="' + i + '">' + t.readings.map(function (r, k) { return '<option value="' + k + '"' + (k === t.chosen ? ' selected' : '') + '>' + r.bax + ' · ' + r.ipa + ' · ' + r.tone + '</option>'; }).join('') + '</select><i>' + R.ipa + '</i></div>';
+  });
+  $('poem').innerHTML = h + '</div></div>';
+  [].forEach.call($('poem').querySelectorAll('select'), function (s) { s.onchange = function () { toks[+s.dataset.i].chosen = +s.value; draw(); }; });
+  [].forEach.call($('poem').querySelectorAll('input'), function (s) { s.onchange = function () { toks[+s.dataset.i].sel = s.value.trim(); }; });
+}
+function annotated() {   // every multi-reading character gets its chosen reading written explicitly: 字[baxter]
+  return toks.map(function (t) {
+    if (t.missing) return t.sel ? t.ch + '[' + t.sel + ']' : '';
+    if (t.readings && t.readings.length > 1) return t.ch + '[' + t.readings[t.chosen].bax + ']';
+    return t.ch;
+  }).join('');
+}
+$('text').oninput = function () { clearTimeout(timer); timer = setTimeout(check, 350); };
+$('era').onchange = check;
+$('dice').onclick = function () { $('seed').value = 1 + Math.floor(Math.random() * 999); };
+$('go').onclick = function () {
+  var o = { text: annotated(), era: $('era').value, title: $('title').value, style: $('style').value, mode: $('mode').value, tempo: +$('tempo').value || 0,
+    seed: +$('seed').value || 1, band: $('band').value, fps: +$('fps').value, res: +$('res').value, aspect: $('aspect').value, prelude: $('prelude').value };
+  post('/api/render', o).then(function (r) { $('msg').textContent = r.error ? r.error : 'queued → ' + r.file; jobs(); });
+};
+function jobs() {
+  fetch('/api/jobs').then(function (r) { return r.json(); }).then(function (J) {
+    $('jobs').innerHTML = J.slice().reverse().map(function (j) {
+      var st = j.status === 'done' ? '<span class="ok">done</span> in ' + j.secs + ' s · <a href="/' + encodeURI(j.file) + '" target="_blank">' + esc(j.file) + '</a>'
+        : j.status === 'failed' ? '<span class="bad">failed</span>' : j.status + '…';
+      return '<div class="job">#' + j.id + ' ' + esc(j.title) + ' (' + (j.style === 'song' ? '宋' : '唐') + ') — ' + st + (j.log ? '<pre>' + esc(j.log.split('\n').slice(-6).join('\n')) + '</pre>' : '') + '</div>';
+    }).join('');
+  });
+}
+setInterval(jobs, 2000); check(); jobs();
+</script>
+</body>
+</html>

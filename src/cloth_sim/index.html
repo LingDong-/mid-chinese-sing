@@ -1,0 +1,26 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>cloth</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #ececea; font: 13px/1.4 system-ui, sans-serif; color: #333; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #ui { position: fixed; left: 12px; top: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  select, button { font: inherit; padding: 2px 6px; border: 1px solid #bbb; border-radius: 4px; background: #fff; color: #333; }
+  label { display: flex; align-items: center; gap: 4px; }
+  #stats { position: fixed; left: 12px; bottom: 10px; white-space: pre; color: #777; font: 12px/1.5 ui-monospace, monospace; }
+</style></head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <select id="garment"></select>
+  <select id="motion"></select>
+  <label><input type="checkbox" id="self" checked> self-collision</label>
+  <label><input type="checkbox" id="wire"> wireframe</label>
+  <label><input type="checkbox" id="showBody" checked> body</label>
+  <label><input type="checkbox" id="bust"> bust</label>
+  <label><input type="checkbox" id="worker"> worker</label>
+  <button id="pause">pause</button>
+  <button id="reset">reset</button>
+</div>
+<div id="stats"></div>
+<script type="module" src="demo.js"></script>
+</body></html>
