@@ -1,5 +1,7 @@
 # middle-chinese-sing
 
+### [[explainer video](https://www.instagram.com/lingd.ng/reel/DfqkMXCNV6W/) | [online demo](https://mchsing.netlify.app)]
+
 唐詩宋詞擬音歌唱三維場景
 
 3D reconstruction of singing in Middle Chinese.
