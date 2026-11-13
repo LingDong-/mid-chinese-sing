@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Middle Chinese Song</title>
+<style>
+  :root { --fg: #ddd; --mute: #8a8478; --bg: #141414; --panel: #1b1b1a; --line: #2f2f2c; --grid: #232321; --bar: #2f2e2b; --hi: #f0a080; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 13px/1.45 -apple-system, system-ui, sans-serif; }
+  #app { display: flex; height: 100%; }
+  #left { width: 440px; flex: none; display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); }
+  #top { flex: 1 1 auto; overflow-y: auto; padding: 14px 14px 8px; min-height: 0; }   /* input: scrolls on its own */
+  #perf { flex: none; padding: 2px 14px 8px; border-top: 1px solid var(--line); }   /* always visible */
+  #bottom { flex: none; height: 32%; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+  #scene { flex: 1; position: relative; background: #000; }
+  iframe { border: 0; width: 100%; height: 100%; display: block; }
+  h1 { font-size: 14px; font-weight: 600; margin: 0 0 10px; }
+  h2 { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mute); margin: 14px 0 6px; }
+  textarea { width: 100%; box-sizing: border-box; height: 96px; font: 16px/1.55 HanaMinA, serif; background: transparent; color: inherit; border: 1px solid var(--line); padding: 6px; resize: vertical; }
+  select, input, button { font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); padding: 2px 5px; }
+  select option, select optgroup { background: var(--panel); }
+  button { cursor: pointer; padding: 3px 10px; } button.main { border-color: #6a5a4a; }
+  input[type=number] { width: 54px; } #title { width: 150px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 6px 0; }
+  .hint { color: var(--mute); font-size: 11px; }
+  #poem .st + .st { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 6px; }
+  .ln { display: flex; flex-wrap: wrap; gap: 4px 2px; margin: 3px 0; }
+  .c { display: flex; flex-direction: column; align-items: center; min-width: 38px; }
+  .c b { font: 19px/1.25 HanaMinA, serif; font-weight: normal; }
+  .c i, .c select, .c input { font: 10px 'Source Code Pro', Menlo, monospace; font-style: normal; color: var(--mute); }
+  .c select, .c input { color: var(--fg); border-color: #8a5a4a; max-width: 120px; padding: 0 2px; }
+  .c.p b { color: var(--mute); } .c.m b { color: #e77; }
+  #rollwrap { flex: 1; overflow: auto; position: relative; }
+  #rollhead { display: flex; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  canvas { display: block; }
+  #jobs .job { font-size: 11px; color: var(--mute); padding: 2px 0; } #jobs a { color: var(--fg); }
+  #tip { position: fixed; pointer-events: none; background: var(--panel); border: 1px solid var(--line); padding: 2px 6px; font-size: 11px; display: none; white-space: nowrap; z-index: 9; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="left">
+    <div id="top">
+      <h1>Middle Chinese Song <span id="status" class="hint"></span></h1>
+      <div class="row"><select id="example" style="max-width: 100%"></select></div>
+      <textarea id="text"></textarea>
+      <div class="hint">，、 end a clause; 。？！ or a new line end a sentence; a blank line starts a new stanza (上下闋). Characters with several readings are menus; red ones are missing from the dictionary.</div>
+      <div id="poem"></div>
+    </div>
+    <div id="perf">
+      <h2>Performance</h2>
+      <div class="row">
+        <label>title <input id="title" placeholder="(first line)"></label>
+        <label>style <select id="style"><option value="tang">唐 Tang</option><option value="song">宋 Song</option></select></label>
+      </div>
+      <div class="row">
+        <label>mode <select id="mode"><option value="">auto</option><option>宮</option><option>商</option><option>角</option><option>徵</option><option>羽</option></select></label>
+        <label>tempo <input id="tempo" type="number" min="40" max="120" placeholder="66"></label>
+        <label>seed <input id="seed" type="number" value="1"></label><button id="dice" title="random seed">↻</button>
+      </div>
+      <div class="row">
+        <label>pronunciation <select id="era"><option value="late">晚唐</option><option value="high">盛唐</option></select></label>
+        <label>music <select id="band"><option value="full">full band</option><option value="sing">簫 琵琶 拍板</option><option value="voice">voice only</option></select></label>
+        <label>prelude <select id="prelude"><option value="full">full</option><option value="short">short</option><option value="none">none</option></select></label>
+      </div>
+      <div class="row">
+        <button id="go" class="main">perform</button>
+        <button id="play" disabled>▶ play</button>
+        <label>camera <select id="cam"><option value="auto">auto</option><option value="full">full</option><option value="medium">medium</option><option value="face">face</option><option value="orbit">orbit (drag)</option></select></label>
+      </div>
+      <div id="video" style="display: none">
+        <h2>Video</h2>
+        <div class="row">
+          <label>format <select id="aspect"><option value="landscape">16:9</option><option value="portrait">9:16</option></select></label>
+          <label>size <select id="res"><option value="720">720p</option><option value="1080">1080p</option></select></label>
+          <label>fps <select id="fps"><option>30</option><option>60</option></select></label>
+          <button id="render">render video</button>
+        </div>
+        <div id="jobs"></div>
+      </div>
+    </div>
+    <div id="bottom">
+      <div id="rollhead"><span class="hint" id="rollinfo">piano roll</span><span class="hint" id="time"></span></div>
+      <div id="rollwrap"><canvas id="cv"></canvas></div>
+    </div>
+  </div>
+  <div id="scene"><iframe id="stage"></iframe></div>
+</div>
+<div id="tip"></div>
+<script src="speech/mcsynth.js"></script>
+<script src="sing.js"></script>
+<script>
+var $ = function (id) { return document.getElementById(id); }, dict = null, toks = [], timer = 0, EX = [], S = null;   // S: the stage's current song, render and note events
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+/* ---------- examples: the sections of poems.txt ("# title | --mode … --tempo … --seed …", then the poem) ---------- */
+function loadExamples(txt) {
+  var sel = $('example'); sel.innerHTML = '<option value="">examples…</option>';
+  (txt || '').split(/^# /m).slice(1).forEach(function (sec) {
+    var nl = sec.indexOf('\n'), head = sec.slice(0, nl).split('|'), o = { title: head[0].trim(), text: sec.slice(nl + 1).trim() };
+    ((head[1] || '').match(/--\w+\s+("[^"]*"|\S+)/g) || []).forEach(function (x) { var m = x.match(/--(\w+)\s+"?([^"]*)"?/); o[m[1]] = m[2]; });
+    EX.push(o); var op = document.createElement('option'); op.value = EX.length - 1; op.textContent = o.title; sel.appendChild(op);
+  });
+}
+$('example').onchange = function () {
+  var o = EX[+this.value]; if (!o) return;
+  $('text').value = o.text; $('title').value = o.title; $('mode').value = o.mode || ''; $('tempo').value = o.tempo || ''; $('seed').value = o.seed || 1;
+  check();
+};
+
+/* ---------- 多音字: one menu per multi-reading character (the same rules as the composer) ---------- */
+var CHAO = { P: ['˧', '˨'], X: ['˧˥', '˨˦'], H: ['˥˨', '˦˩'], R: ['˥', '˨'] }, TN = { P: '平', X: '上', H: '去', R: '入' };
+function ipaShow(s) { return s.ipa.replace(/[˥˧˩]+₂?$/, '').replace(/̚/g, '') + CHAO[s.tone][s.reg === 'yang' ? 1 : 0]; }
+function readings(text, era) {
+  return (text.replace(/\r/g, '').match(/[^\x00-\x7f][\[［][^\]］]*[\]］]|[\s\S]/gu) || []).map(function (t) {
+    var ch = String.fromCodePoint(t.codePointAt(0));
+    if (/[\s，。、；：！？,.;:!?《》「」『』“”"'（）()·—\-]/.test(ch)) return { ch: ch };
+    var sg = SING.parseText(t, dict, era), Sy = sg.stanzas[0] && sg.stanzas[0][0] && sg.stanzas[0][0].syl[0];
+    if (!Sy) return { ch: ch, missing: true, sel: t.length > ch.length ? t.slice(ch.length).replace(/[\[\]［］]/g, '') : '' };
+    var alt = (Sy.s.alt && Sy.s.alt.length ? Sy.s.alt : [Sy.s.bax]).slice(); if (alt.indexOf(Sy.s.bax) < 0) alt.unshift(Sy.s.bax);
+    var R = alt.map(function (b) { var p = MC.parseBax(b, era), q = /X$/.test(b) ? 'X' : /H$/.test(b) ? 'H' : /(p|t|k)$/.test(b) ? 'R' : 'P';
+      return { bax: b, ipa: ipaShow(p), tone: (q === p.tone ? TN[q] : TN[q] + '→' + TN[p.tone]) + (era === 'high' ? '' : p.reg === 'yang' ? '·陽' : '·陰') }; });
+    R.forEach(function (r) { if (R.some(function (o) { return o !== r && o.ipa === r.ipa; })) r.tone += ' 同音'; });
+    return { ch: ch, chosen: alt.indexOf(Sy.s.bax), readings: R };
+  });
+}
+function check() {
+  if (!dict) return;
+  var T = readings($('text').value, $('era').value);
+  T.forEach(function (t, i) { var o = toks[i]; if (o && o.ch === t.ch && o.readings && t.readings && o.chosen < t.readings.length) t.chosen = o.chosen; if (o && o.ch === t.ch && t.missing) t.sel = o.sel || t.sel; });
+  toks = T; drawPoem();
+}
+function drawPoem() {
+  var h = '<div class="st"><div class="ln">', nl = 0;
+  toks.forEach(function (t, i) {
+    if (t.ch === '\n') { nl++; return; }
+    if (nl) { h += '</div>' + (nl > 1 ? '</div><div class="st">' : '') + '<div class="ln">'; nl = 0; }
+    if (!t.readings && !t.missing) { if (/\S/.test(t.ch)) h += '<div class="c p"><b>' + esc(t.ch) + '</b></div>'; return; }
+    if (t.missing) { h += '<div class="c m"><b>' + esc(t.ch) + '</b><input data-i="' + i + '" value="' + esc(t.sel || '') + '" placeholder="baxter" size="6"></div>'; return; }
+    var R = t.readings[t.chosen];
+    if (t.readings.length === 1) { h += '<div class="c"><b>' + esc(t.ch) + '</b><i>' + R.bax + '</i><i>' + R.ipa + '</i></div>'; return; }
+    h += '<div class="c"><b>' + esc(t.ch) + '</b><select data-i="' + i + '">' + t.readings.map(function (r, k) { return '<option value="' + k + '"' + (k === t.chosen ? ' selected' : '') + '>' + r.bax + ' · ' + r.ipa + ' · ' + r.tone + '</option>'; }).join('') + '</select><i>' + R.ipa + '</i></div>';
+  });
+  $('poem').innerHTML = h + '</div></div>';
+  [].forEach.call($('poem').querySelectorAll('select'), function (s) { s.onchange = function () { toks[+s.dataset.i].chosen = +s.value; drawPoem(); }; });
+  [].forEach.call($('poem').querySelectorAll('input'), function (s) { s.onchange = function () { toks[+s.dataset.i].sel = s.value.trim(); }; });
+}
+function annotated() {   // the chosen reading of every multi-reading character, written out: 字[baxter]
+  return toks.map(function (t) {
+    if (t.missing) return t.sel ? t.ch + '[' + t.sel + ']' : '';
+    if (t.readings && t.readings.length > 1) return t.ch + '[' + t.readings[t.chosen].bax + ']';
+    return t.ch;
+  }).join('');
+}
+$('text').oninput = function () { clearTimeout(timer); timer = setTimeout(check, 350); };
+$('era').onchange = check;
+$('dice').onclick = function () { $('seed').value = 1 + Math.floor(Math.random() * 999); };
+
+/* ---------- the stage (stage.html, unmodified, in the iframe); its audio comes through window.STAGE_AUDIO ---------- */
+function title() { return $('title').value.trim() || ($('text').value.match(/[^\s，。、；：！？\[\]a-zA-Z0-9]+/) || ['poem'])[0].slice(0, 12); }
+function perform() {
+  var text = annotated(); if (!text.trim()) return;
+  S = null; drawRoll(0); $('play').disabled = true; $('status').textContent = 'building…';
+  var q = ['style=' + $('style').value, 'text=' + encodeURIComponent(text), 'title=' + encodeURIComponent(title()), 'seed=' + (+$('seed').value || 1), 'cam=' + $('cam').value,
+    $('mode').value ? 'mode=' + encodeURIComponent($('mode').value) : '', +$('tempo').value ? 'tempo=' + +$('tempo').value : '', $('era').value === 'high' ? 'era=high' : '',
+    $('prelude').value !== 'full' ? 'prelude=' + $('prelude').value : '', $('band').value === 'full' ? 'band' : ''].filter(Boolean).join('&');
+  var fr = $('stage'), band = $('band').value;
+  fr.onload = function () {
+    var w = fr.contentWindow, st = w.document.createElement('style');
+    st.textContent = '#ui { display: none !important; }'; w.document.head.appendChild(st);   // all controls live in this panel
+    w.STAGE_AUDIO = function (sg, o) {   // the stage's own render, with the notes logged for the piano roll
+      var ev = [], opt = Object.assign({}, o, { events: ev });
+      var r = band === 'full' && w.BAND ? w.BAND.render(sg, opt) : w.SING.render(sg, Object.assign(opt, band === 'voice' ? { band: '' } : {}));
+      S = { song: sg, r: r, ev: ev }; setTimeout(function () { layoutRoll(); drawRoll(0); }, 0);
+      return r;
+    };
+    (function wait() { if (w.STAGE && w.STAGE.perf && w.STAGE.perf() && S) { $('status').textContent = ''; $('play').disabled = false; } else setTimeout(wait, 300); })();
+  };
+  fr.src = 'stage.html?' + q;
+}
+function stageWin() { var w = $('stage').contentWindow; return w && w.STAGE ? w : null; }
+$('go').onclick = perform;
+$('play').onclick = function () { var w = stageWin(); if (!w) return; w.STAGE.play(); setTimeout(function () { $('play').textContent = w.document.getElementById('play').textContent === '❚❚' ? '❚❚ pause' : '▶ play'; }, 50); };
+$('cam').onchange = function () { var w = stageWin(); if (!w) return; var c = w.document.getElementById('cam'); c.value = this.value; c.dispatchEvent(new w.Event('change')); };
+$('style').onchange = function () { if (S) perform(); };
+
+/* ---------- piano roll (as music.html, compact): one lane per part, the playhead on the stage's audio clock ---------- */
+var PARTS = [['voice', '歌', '#c0504d', 92], ['xiao', '簫', '#5b8a72', 44], ['di', '笛', '#4f7fa8', 44], ['sheng', '笙', '#9a7bb5', 50], ['pipa', '琵琶', '#c08a3e', 50],
+  ['qin', '琴', '#7a6a55', 44], ['zheng', '箏', '#b07a9a', 44], ['ruan', '阮', '#6f7f3f', 38], ['bell', '方響', '#8c8c8c', 22], ['ban', '拍板', '#a0522d', 20], ['drum', '鼓', '#777', 20]];
+var NUM = { 0: '1', 2: '2', 4: '3', 5: '4', 6: '#4', 7: '5', 9: '6', 11: '7' }, NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+var lanes = [], PPS = 40, LAB = 44, gongM = 0, spb = 1, lead = 0;
+function layoutRoll() {
+  if (!S) return; lanes = []; var y = 0, ev = S.ev, sg = S.song;
+  spb = 60 / sg.tempo; lead = S.r.syls[0].on - sg.phrases[0].syl[0].t * spb;
+  var v0 = ev.find(function (e) { return e.part === 'voice'; }); gongM = v0 ? Math.round(v0.m - sg.phrases[0].syl[0].notes[0].p) : 60;
+  PARTS.forEach(function (P) {
+    var es = ev.filter(function (e) { return e.part === P[0]; }); if (!es.length) return;
+    var ms = es.filter(function (e) { return e.m != null; }).map(function (e) { return e.m; });
+    lanes.push({ part: P[0], zh: P[1], col: P[2], y: y, h: P[3], lo: ms.length ? Math.min.apply(0, ms) - 1 : 0, hi: ms.length ? Math.max.apply(0, ms) + 1 : 1, ev: es }); y += P[3];
+  });
+  var dur = S.r.L.length / S.r.sr, cv = $('cv'), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.ceil((LAB + dur * PPS) * dpr); cv.height = Math.ceil(y * dpr); cv.style.width = (LAB + dur * PPS) + 'px'; cv.style.height = y + 'px';
+  $('rollinfo').textContent = sg.mode + '調式 · 1 = ' + NAMES[((gongM % 12) + 12) % 12] + ' · ♩ = ' + sg.tempo;
+}
+function ny(l, m) { var top = l.y + 5, bot = l.part === 'voice' ? l.y + l.h - 30 : l.y + l.h - 5; return bot - (m - l.lo) / Math.max(1, l.hi - l.lo) * (bot - top); }
+function drawRoll(t) {
+  var cv = $('cv'), g = cv.getContext('2d'), dpr = window.devicePixelRatio || 1;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cv.width, cv.height); if (!S) { $('time').textContent = ''; return; }
+  var dur = S.r.L.length / S.r.sr, H = cv.height / dpr, X = function (s) { return LAB + s * PPS; }, sl = $('rollwrap').scrollLeft;
+  for (var b = Math.ceil(-lead / spb); lead + b * spb < dur; b++) { g.fillStyle = b % 4 === 0 ? '#2f2e2b' : '#232321'; g.fillRect(X(lead + b * spb), 0, 1, H); }
+  lanes.forEach(function (l) {
+    g.fillStyle = '#2f2f2c'; g.fillRect(0, l.y + l.h - 1, cv.width, 1);
+    var nh = l.ev[0].m == null ? l.h - 8 : Math.max(2, Math.min(7, (l.h - 14) / Math.max(1, l.hi - l.lo)));
+    l.ev.forEach(function (e) {
+      var on = t >= e.t0 && t < e.t1, y = e.m == null ? l.y + 4 : ny(l, e.m) - nh / 2;
+      g.globalAlpha = on ? 1 : 0.6; g.fillStyle = l.col; g.fillRect(X(e.t0), y, Math.max(2, (e.t1 - e.t0) * PPS), nh);
+      if (l.part === 'voice' && e.ch) { g.globalAlpha = 1; g.fillStyle = on ? '#f0a080' : '#d8d2c6'; g.font = '13px HanaMinA, serif'; g.fillText(e.ch, X(e.t0), l.y + l.h - 15); g.fillStyle = '#8a8478'; g.font = '9px "Source Code Pro", Menlo, monospace'; g.fillText(e.bax, X(e.t0), l.y + l.h - 4); }
+    });
+    g.globalAlpha = 1;
+  });
+  g.fillStyle = '#f0a080'; g.fillRect(X(t), 0, 1.5, H);
+  lanes.forEach(function (l) { g.fillStyle = '#1b1b1a'; g.fillRect(sl, l.y, LAB - 4, l.h - 1); g.fillStyle = '#bdb6aa'; g.font = '12px HanaMinA, serif'; g.fillText(l.zh, sl + 6, l.y + Math.min(16, l.h - 5)); });   // lane names stay at the left edge
+  $('time').textContent = t.toFixed(1) + ' / ' + dur.toFixed(1) + ' s';
+}
+(function tick() {
+  var w = stageWin(), t = S && w ? w.STAGE.now() : 0;
+  if (S) { var wr = $('rollwrap'), x = LAB + t * PPS; if (x < wr.scrollLeft + LAB + 20 || x > wr.scrollLeft + wr.clientWidth * 0.75) wr.scrollLeft = x - LAB - wr.clientWidth * 0.25; drawRoll(t);
+    if (w) $('play').textContent = w.document.getElementById('play').textContent === '❚❚' ? '❚❚ pause' : '▶ play'; }
+  requestAnimationFrame(tick);
+})();
+$('cv').onmousemove = function (e) {
+  var tip = $('tip'); tip.style.display = 'none'; if (!S) return;
+  var t = (e.offsetX - LAB) / PPS, y = e.offsetY, l = lanes.find(function (q) { return y >= q.y && y < q.y + q.h; }); if (!l || t < 0) return;
+  var best = null, bd = 8; l.ev.forEach(function (n) { if (t < n.t0 - 0.05 || t > n.t1 + 0.05) return; var d = n.m == null ? 0 : Math.abs(ny(l, n.m) - y); if (d < bd) { bd = d; best = n; } });
+  if (!best) return;
+  var s = l.zh + (best.ch ? ' · ' + best.ch + ' ' + best.bax : '');
+  if (best.m != null) { var m = Math.round(best.m), dg = ((m - gongM) % 12 + 12) % 12, oc = Math.floor((m - gongM) / 12); s += ' · ' + (NUM[dg] || '?') + (oc > 0 ? "'".repeat(oc) : ','.repeat(-oc)) + ' (' + NAMES[m % 12] + (Math.floor(m / 12) - 1) + ')'; }
+  tip.textContent = s + ' · ' + best.t0.toFixed(2) + ' s'; tip.style.display = 'block'; tip.style.left = (e.clientX + 12) + 'px'; tip.style.top = (e.clientY + 12) + 'px';
+};
+$('cv').onmouseleave = function () { $('tip').style.display = 'none'; };
+
+/* ---------- video: only when served by tool/maker.js (it has the render queue) ---------- */
+function jobs() {
+  fetch('/api/jobs').then(function (r) { return r.json(); }).then(function (J) {
+    $('jobs').innerHTML = J.slice().reverse().slice(0, 6).map(function (j) {
+      return '<div class="job">#' + j.id + ' ' + esc(j.title) + ' — ' + (j.status === 'done' ? 'done · <a href="/' + encodeURI(j.file) + '" target="_blank">' + esc(j.file) + '</a>' : j.status === 'failed' ? 'failed' : j.status + '…') + '</div>';
+    }).join('');
+  }).catch(function () {});
+}
+fetch('/api/jobs').then(function (r) { if (!r.ok) throw 0; $('video').style.display = ''; jobs(); setInterval(jobs, 3000); }).catch(function () {});
+$('render').onclick = function () {
+  fetch('/api/render', { method: 'POST', body: JSON.stringify({ text: annotated(), title: title(), style: $('style').value, mode: $('mode').value, tempo: +$('tempo').value || 0,
+    seed: +$('seed').value || 1, era: $('era').value, band: $('band').value === 'full' ? 'full' : 'sing', prelude: $('prelude').value, aspect: $('aspect').value, res: +$('res').value, fps: +$('fps').value }) })
+    .then(function (r) { return r.json(); }).then(jobs);
+};
+
+/* ---------- start ---------- */
+Promise.all([fetch('speech/mc_dict.json').then(function (r) { return r.json(); }), fetch('poems.txt').then(function (r) { return r.ok ? r.text() : ''; }).catch(function () { return ''; })])
+  .then(function (res) {
+    dict = res[0]; loadExamples(res[1]);
+    var first = EX.findIndex(function (o) { return /芙蓉樓/.test(o.title); }); $('example').value = first >= 0 ? first : 0; $('example').onchange.call($('example'));
+    perform();
+  }).catch(function () { $('status').textContent = '— serve this folder over http (python3 -m http.server, or node tool/maker.js for video)'; });
+</script>
+</body>
+</html>
